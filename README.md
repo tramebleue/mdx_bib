@@ -39,9 +39,9 @@ Citation keys are any identifiers inside square brackets with a `@`-prefix
 
 will render, according to your bibliography database, to:
 
-Some claim ([@adams98][Adams, 1998]).
+Some claim ([Adams, 1998][@adams98]).
 
-Some claim ([@adams98][Adams, 1998]; [@barney04][Barney, 2004])
+Some claim ([Adams, 1998][@adams98]; [Barney, 2004][@barney04])
 
 You can also insert citations in the running text,
 by prefixing the citekey with some introduction text.
