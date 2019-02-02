@@ -6,16 +6,20 @@ from markdown.inlinepatterns import Pattern
 from markdown.util import etree
 
 from pybtex.database.input import bibtex
+from pybtex.style.template import FieldIsMissing
 
 from collections import OrderedDict
 import re
+
+from .styles import APAStyle
 
 BRACKET_RE = re.compile(r'\[([^\[]+)\]')
 CITE_RE    = re.compile(r'@(\w+)')
 DEF_RE     = re.compile(r'\A {0,3}\[@(\w+)\]:\s*(.*)')
 INDENT_RE  = re.compile(r'\A\t| {4}(.*)')
 
-CITATION_RE = r'@(\w+)'          
+CITATION_RE = r'\[([^@^\[]*)(@[a-zA-Z0-9;@\s]+)\]'
+INNER_CITATION_RE = re.compile(r'@(\w+)')         
 
 class Bibliography(object):
     """ Keep track of document references and citations for exporting """ 
@@ -26,6 +30,7 @@ class Bibliography(object):
         
         self.citations = OrderedDict()
         self.references = dict()
+        self.style = APAStyle()
 
         if bibtex_file:
             try:
@@ -55,22 +60,14 @@ class Bibliography(object):
             out += "%s."%(author.middle()[0][0])
         return out
 
-    def formatReference(self, ref):
-        authors = ", ".join(map(self.formatAuthor, ref.persons["author"]))
-        title = ref.fields["title"]
-        journal = ref.fields.get("journal", "")
-        volume = ref.fields.get("volume", "")
-        year = ref.fields.get("year")
+    def formatReference(self, key, entry):
+        try:
+            return self.style.format_entry(key, entry, self.bibsource).text.render_as('html')
+        except FieldIsMissing as error:
+            return self.formatError(key, error)
 
-        reference = "<p>%s: <i>%s</i>."%(authors, title)
-        if journal:
-            reference += " %s."%journal
-            if volume:
-                reference += " <b>%s</b>,"%volume
-            
-        reference += " (%s)</p>"%year
-
-        return reference
+    def formatError(self, key, error):
+        return '%s: <span style="color: red; font-weight: bold">%s</span>' % (key, error)
 
     def makeBibliography(self, root):
         if self.order == 'alphabetical':
@@ -82,20 +79,19 @@ class Bibliography(object):
         if not self.citations:
             return div
 
-        table = etree.SubElement(div, "table")
-        tbody = etree.SubElement(table, "tbody")
-        for id in self.citations:
-            tr = etree.SubElement(tbody, "tr")
-            tr.set("id", self.referenceID(id))
-            ref_id = etree.SubElement(tr, "td")
-            ref_id.text = id
-            ref_txt = etree.SubElement(tr, "td")
+        for id in sorted(self.citations):
+
+            ref_txt = etree.SubElement(div, "div")
+            ref_txt.set("id", self.referenceID(id))
+            ref_txt.set("class", "bibentry")
             if id in self.references:
                 self.extension.parser.parseChunk(ref_txt, self.references[id])
             elif id in self.bibsource:
-                ref_txt.text = self.formatReference(self.bibsource[id])
+                par = etree.SubElement(ref_txt, "p")
+                par.text = self.formatReference(id, self.bibsource[id])
             else:
-                ref_txt.text = "Missing citation"
+                par = etree.SubElement(ref_txt, "p")
+                par.text = self.formatError(id, 'Missing Citation')
 
         return div
 
@@ -150,17 +146,58 @@ class CitationsPattern(Pattern):
         self.bib = bibliography
 
     def handleMatch(self, m):
-        id = m.group(2)
-        if id in self.bib.citations:
-            a = etree.Element("a")
-            a.set('id', self.bib.citationID(id))
-            a.set('href', '#' + self.bib.referenceID(id))
-            a.set('class', 'citation')
-            a.text = id
+        
+        intro = m.group(2)
+        citations = m.group(3)
 
-            return a
+        if intro:
+            if len(intro) == 1:
+                intro = ''
+            template_et_al = '%s et al. (%s)'
+            template = '%s (%s)'
+            prefix = ''
+            suffix = ''
         else:
-           return None 
+            template_et_al = '%s et al., %s'
+            template = '%s, %s'
+            prefix = '('
+            suffix = ')'
+
+        container = etree.Element('span')
+        container.text = intro
+        citations = [m.group(1) for m in INNER_CITATION_RE.finditer(citations)]
+
+        for i, citation in enumerate(citations):
+
+            if citation in self.bib.citations:
+
+                a = etree.SubElement(container, "a")
+                a.set('id', self.bib.citationID(citation))
+                a.set('href', '#' + self.bib.referenceID(citation))
+                a.set('class', 'citation')
+
+                if citation in self.bib.bibsource:
+
+                    ref = self.bib.bibsource[citation]
+                    authors = ref.persons['author']
+                    year = ref.fields.get('year', '?')
+                    if len(authors) > 1:
+                        a.text = prefix + template_et_al % (authors[0].last()[0], year)
+                    elif authors:
+                        a.text = prefix + template % (authors[0].last()[0], year)
+                    else:
+                        a.text = prefix + citation
+                else:
+                    
+                    a.text = prefix + citation
+
+                if i < len(citations)-1:
+                    a.tail = '; '
+                    prefix = ''
+                else:
+                    a.text += suffix
+
+        return container
     
 class CitationsTreeprocessor(Treeprocessor):
     """ Add a bibliography/reference section to the end of the document """

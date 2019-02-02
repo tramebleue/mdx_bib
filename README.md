@@ -9,7 +9,6 @@ The references associated with the citation keys can be defined manually or gene
 Running 
 
 ```bash
-$ python setup.py build
 $ python setup.py install
 ```
 
@@ -19,33 +18,38 @@ will install a module named `mdx_bib`.
 import markdown
 from mdx_bib import CitationExtension
 
-cite = CitationExtension(bibtex_file='library.bib', order='unsorted')
+cite = CitationExtension(bibtex_file='/path/to/library.bib', order='unsorted')
 html = markdown.markdown(text, extensions=[cite])
 ```
 
-## Syntax
-
-Citation keys are any identifiers inside square brackets with a `@`-prefix
-
-```markdown
-Some claim [see @adams98].
-
-Some claim [@adams98; @barney04].
-```
-
-The first line will be converted
-
-```html
-<p>Some claim [see <a id="cite-adams98" href="#ref-adams98" class="citation>@adams98</a>.</p>
-```
+## Defining References
 
 This extension will first look for any manually defined bibligraphy entries, for example
 
-```markdown
-[@barney04]: Barneby, C.D. *A review of reviews*. Annual Reviews of Something (2104)
-```
+    [@barney04]: Barneby, C.D. *A review of reviews*. Annual Reviews of Something (2104)
 
 If a matching reference definition cannot be found, then the extension looks in the BibTeX file for a matching citation key.
 
+## Citing
+
+Citation keys are any identifiers inside square brackets with a `@`-prefix
+
+    Some claim [@adams98].
+    Some claim [@adams98; @barney04].
+
+will render, according to your bibliography database, to:
+
+Some claim ([@adams98](Adams, 1998)).
+
+Some claim ([@adams98](Adams, 1998); [@barney04](Barney, 2004))
+
+You can also insert citations in the running text,
+by prefixing the citekey with some introduction text.
+The `+` sign switches from the former format to the latter.
+
+    Some claim, [see @adams98]. [+@barney04] also says ...
+
 [R Markdown]: http://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html
+[@adams98]: #adams98
+[@barney04]: #barney04
 
